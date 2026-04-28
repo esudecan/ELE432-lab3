@@ -32,45 +32,35 @@ logic [31:0] PCNext;
 logic [31:0] RD1;
 logic [4:0]  rs1, rs2, rd;
 
-// ── Adres ve yazma ──────────────────────────────────────────
 assign Adr       = AdrSrc ? Result : PC;  
 assign WriteData = RD2;
-
-// ── PC güncelleme ───────────────────────────────────────────
-// PCWrite=1 → Result (dal/jump hedefi veya PC+4)
-// PCWrite=0 → PC olduğu gibi kalır (flopr zaten tutar, d=PC olunca değişmez)
 assign PCNext = PCWrite ? Result : PC;
 
-// ── Instruction alanları ────────────────────────────────────
 assign rs1 = Instr[19:15];
 assign rs2 = Instr[24:20];
 assign rd  = Instr[11:7];
 assign A   = RD1;
 
-// ── Instruction register (IRWrite enable'lı) ────────────────
 flopenr #(32) instrreg(
     .clk(clk), .reset(reset),
     .en(IRWrite),
     .d(ReadData),
     .q(Instr)
 );
-
-// ── PC register ─────────────────────────────────────────────
+    
 flopr #(32) pcreg(
     .clk(clk), .reset(reset),
     .d(PCNext),
     .q(PC)
 );
 
-// ── OldPC: fetch anında PC'yi sakla (IRWrite ile) ───────────
 flopenr #(32) oldpcreg(
     .clk(clk), .reset(reset),
     .en(IRWrite),
-    .d(PC),          // fetch'teki PC (henüz +4 olmadan önceki değer)
+    .d(PC),        
     .q(OldPC)
 );
 
-// ── Register file ───────────────────────────────────────────
 regfile rf(
     .clk(clk),
     .WE3(RegWrite),
@@ -79,14 +69,12 @@ regfile rf(
     .RD1(RD1), .RD2(RD2)
 );
 
-// ── Immediate genişletici ───────────────────────────────────
 extend ext(
     .instr(Instr[31:7]),
     .immsrc(ImmSrc),
     .immext(ImmExt)
 );
 
-// ── ALU kaynak seçimi A ─────────────────────────────────────
 always_comb begin
     case (ALUSrcA)
         2'b00:   SrcA = PC;
@@ -96,7 +84,6 @@ always_comb begin
     endcase
 end
 
-// ── ALU kaynak seçimi B ─────────────────────────────────────
 always_comb begin
     case (ALUSrcB)
         2'b00:   SrcB = WriteData;   // RD2
@@ -106,7 +93,6 @@ always_comb begin
     endcase
 end
 
-// ── ALU ─────────────────────────────────────────────────────
 alu aluunit(
     .a(SrcA), .b(SrcB),
     .alucontrol(ALUControl),
@@ -114,24 +100,21 @@ alu aluunit(
     .zero(Zero)
 );
 
-// ── ALU çıkış register'ı ────────────────────────────────────
 flopr #(32) aluoutreg(
     .clk(clk), .reset(reset),
     .d(ALUResult),
     .q(ALUOut)
 );
 
-// ── Sonuç mux ───────────────────────────────────────────────
 always_comb begin
     case (ResultSrc)
         2'b00:   Result = ALUOut;
         2'b01:   Result = Data;
-        2'b10:   Result = ALUResult;   // PC+4 veya anlık ALU sonucu
+        2'b10:   Result = ALUResult;   
         default: Result = 32'b0;
     endcase
 end
 
-// ── Data (bellek okuma) register'ı ─────────────────────────
 flopr #(32) datareg(
     .clk(clk), .reset(reset),
     .d(ReadData),
